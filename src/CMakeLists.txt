@@ -5,23 +5,27 @@
 # Following line is required to perform compatibility checks
 # Make sure that the version is at least 3.5, as required by PCL
 cmake_minimum_required(VERSION 3.5)
-project(pcl_cmake_minimum)
+project(edgedetection_bazazian)
 
 # Use the following to link against all the PCL libraries
 # Remove REQUIRED if PCL is not compulsory
 # Note: might be heavy, not the best practice
 # find_package(PCL REQUIRED)
 # Prefer to use the correct component libraries instead
-find_package(PCL COMPONENTS common REQUIRED)
+find_package(PCL 1.2 REQUIRED)
+message("PCL_LIBRARIES - ${PCL_LIBRARIES}")
 
 # All header directories not under your control go here
 # ${PCL_INCLUDE_DIRS} not required to be manually added since PCL 1.9
 # include_directories(SYSTEM)
 # Headers for this project go here
 # include_directories(include)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 # Add source to this project's executable.
-add_executable (edge "main.cpp" "main.h")
+add_executable (edge "main.cpp" "main.h"  "pcd_file.cpp" "pcd_file.h")
 
 # Add the required libraries
 target_link_libraries(edge ${PCL_LIBRARIES})

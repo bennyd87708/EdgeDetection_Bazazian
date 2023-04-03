@@ -4,12 +4,14 @@
 #include "main.h"
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include "pcd_file.h"
 
 using namespace std;
 
 int main()
 {
-	cout << "Hello CMake." << endl;
-	pcl::PointCloud<pcl::PointXYZ>* ptr = nullptr;
+	pcd_file::write_file();
+	pcd_file::read_file();
+	cin.get();
 	return 0;
 }
