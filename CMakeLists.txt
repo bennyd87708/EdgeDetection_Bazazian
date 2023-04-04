@@ -4,6 +4,7 @@
 cmake_minimum_required (VERSION 3.8)
 
 project ("EdgeDetection_Bazazian")
+set(Boost_NO_WARN_NEW_VERSIONS 1)
 
 # Include sub-projects.
 add_subdirectory ("src")

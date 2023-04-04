@@ -33,6 +33,7 @@ bld/
 [Ll]ogs/
 
 out/
+lib/
 CMakeSettings.json
 
 # Visual Studio 2015/2017 cache/options directory
