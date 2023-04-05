@@ -2,49 +2,91 @@
 //
 
 #include "main.h"
+#include <iomanip>
+#include <ctime>
 #include <E57SimpleReader.h>
 #include <E57SimpleWriter.h>
 
 using namespace std;
 
+double randDouble(int max) {
+    return max * rand() / (RAND_MAX + 1.0f);
+}
+
+void readTestFile() {
+    cout << "\n\nREADING TEST.E57\n";
+    e57::Reader reader("../../../../data/test.e57", {});
+    e57::E57Root header;
+    reader.GetE57Root(header);
+    cout << "GUID: " << header.guid << "\n";
+    //reader.getdata3dcount()
+    e57::Data3D data3DHeader;
+    reader.ReadData3D(0, data3DHeader);
+    cout << "Data GUID: " << data3DHeader.guid << "\n";
+    cout << "Point Count: " << data3DHeader.pointCount << "\n";
+    size_t totalPoints = data3DHeader.pointCount;
+    e57::Data3DPointsDouble pointsData(data3DHeader);
+    auto vectorReader = reader.SetUpData3DPointsData(0, totalPoints, pointsData);
+    vectorReader.read();
+    vectorReader.close();
+    for (int i = 0; i < totalPoints; i++) {
+        printf("Point #%-6dLocation: %-13f%-13f%-15fColor: %-5d%-5d%-5d\n", i,
+            pointsData.cartesianX[i], pointsData.cartesianY[i], pointsData.cartesianZ[i],
+            pointsData.colorRed[i], pointsData.colorGreen[i], pointsData.colorBlue[i]);
+    }
+    reader.Close();
+}
+
+void writeTestFile() {
+    cout << "WRITING TEST.E57\n";
+    e57::WriterOptions options;
+    options.guid = "Test File GUID";
+    e57::Writer writer("../../../../data/test.e57", options);
+    e57::Data3D	header;
+    size_t totalPoints = 5;
+    int maxCoord = 1024;
+    header.guid = "Test File Scan Header GUID";
+    header.description = "libE57Format test write file";
+    header.pointCount = totalPoints;
+    header.pointFields.cartesianXField = true;
+    header.pointFields.cartesianYField = true;
+    header.pointFields.cartesianZField = true;
+    header.pointFields.colorRedField = true;
+    header.pointFields.colorGreenField = true;
+    header.pointFields.colorBlueField = true;
+    header.colorLimits.colorRedMaximum = 255;
+    header.colorLimits.colorGreenMaximum = 255;
+    header.colorLimits.colorBlueMaximum = 255;
+    header.pointFields.pointRangeMinimum = 0.0;
+    header.pointFields.pointRangeMaximum = double(maxCoord);
+    e57::Data3DPointsDouble pointsData(header);
+    for (int i = 0; i < totalPoints; i++) {
+        pointsData.cartesianX[i] = randDouble(maxCoord);
+        pointsData.cartesianY[i] = randDouble(maxCoord);
+        pointsData.cartesianZ[i] = randDouble(maxCoord);
+        pointsData.colorRed[i] = int(randDouble(255));
+        pointsData.colorGreen[i] = int(randDouble(255));
+        pointsData.colorBlue[i] = int(randDouble(255));
+
+        printf("Point #%-6dLocation: %-13f%-13f%-15fColor: %-5d%-5d%-5d\n", i,
+            pointsData.cartesianX[i], pointsData.cartesianY[i], pointsData.cartesianZ[i],
+            pointsData.colorRed[i], pointsData.colorGreen[i], pointsData.colorBlue[i]);
+    }
+    try {
+        writer.WriteData3DData(header, pointsData);
+    }
+    catch (e57::E57Exception& err)
+    {
+        cout << err.errorStr() << ": " << err.context();
+    }
+    writer.Close();
+}
+
 int main()
 {
-    e57::Writer eWriter("../../../../data/test.e57");
-    e57::Data3D	scanHeader;
-    scanHeader.guid = "{D3817EC3-A3DD-4a81-9EF5-2FFD0EC91D5A}";
-    int totalPoints = 20;
-    scanHeader.pointCount = totalPoints;
-    scanHeader.pointFields.cartesianXField = true;
-    scanHeader.pointFields.cartesianYField = true;
-    scanHeader.pointFields.cartesianZField = true;
-    int scanIndex = eWriter.NewData3D(scanHeader);
-    e57::Data3DPointsData_t<double> pointsData;
-    e57::CompressedVectorWriter dataWriter = eWriter.SetUpData3DPointsData(scanIndex, totalPoints, pointsData);
-    for (std::size_t i = 0; i < totalPoints; i++) {
-        pointsData.cartesianX[i] = 1024 * rand() / (RAND_MAX + 1.0f);
-        pointsData.cartesianY[i] = 1024 * rand() / (RAND_MAX + 1.0f);
-        pointsData.cartesianZ[i] = 1024 * rand() / (RAND_MAX + 1.0f);
-        pointsData.colorRed[i] = 255 * rand();
-        pointsData.colorGreen[i] = 255 * rand();
-        pointsData.colorBlue[i] = 255 * rand();
-    }
-
-    // write the mesh data
-    dataWriter.write(totalPoints);
-    dataWriter.close();
-    eWriter.Close();
-
-    /*
-    e57::E57Root e57FileInfo{ };
-    e57::Reader  e57FileReader{ "../../../../data/test.e57" };
-
-    // check if the file is opened
-    e57FileReader.IsOpen();
-    // read E57 root to explore the tree
-    e57FileReader.GetE57Root(e57FileInfo);
-
-    int64_t data3DCount = e57FileReader.GetData3DCount();
-    */
-	cin.get();
-	return 0;
+    srand(time(NULL));
+    writeTestFile();
+    readTestFile();
+    cin.get();
+    return 0;
 }
