@@ -103,7 +103,7 @@ void writeTestFile(bool verbose = false) {
     for (int i = 0; i < POINTS/2; i++) {
         pointsData.cartesianX[i] = randDouble(1024);
         pointsData.cartesianY[i] = randDouble(1024);
-        pointsData.cartesianZ[i] = 0.0;
+        pointsData.cartesianZ[i] = randDouble(3);
         pointsData.colorRed[i] = int(randDouble(255));
         pointsData.colorGreen[i] = int(randDouble(255));
         pointsData.colorBlue[i] = int(randDouble(255));
@@ -115,7 +115,7 @@ void writeTestFile(bool verbose = false) {
     }
 
     for (int i = POINTS / 2; i < POINTS; i++) {
-        pointsData.cartesianX[i] = 0.0;
+        pointsData.cartesianX[i] = randDouble(3);
         pointsData.cartesianY[i] = randDouble(1024);
         pointsData.cartesianZ[i] = randDouble(1024);
         pointsData.colorRed[i] = int(randDouble(255));
@@ -132,14 +132,14 @@ void writeTestFile(bool verbose = false) {
 }
 
 void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud) {
-    cout << "Marking Edges\n";
+    cout << "Marking edges\n";
 
     KdTreeFLANN<PointXYZRGBA> kdtree;
     kdtree.setInputCloud(cloud);
 
     for (int i = 0; i < POINTS; i++) {
         PointXYZRGBA searchPoint = (*cloud)[i];
-        int K = 20;
+        int K = 50;
         vector<int> indices(K);
         vector<float> distances(K);
         if (kdtree.nearestKSearch(searchPoint, K, indices, distances) <= 0) {
@@ -149,35 +149,14 @@ void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud) {
             continue;
         }
 
-        double mean_x = 0;
-        double mean_y = 0;
-        double mean_z = 0;
+        MatrixXd mat(K, 3);
         for (int j = 0; j < K; j++) {
-            mean_x += (*cloud)[indices[j]].x;
-            mean_y += (*cloud)[indices[j]].y;
-            mean_z += (*cloud)[indices[j]].z;
+            mat(j, 0) = (*cloud)[indices[j]].x;
+            mat(j, 1) = (*cloud)[indices[j]].y;
+            mat(j, 2) = (*cloud)[indices[j]].z;
         }
-        mean_x /= K;
-        mean_y /= K;
-        mean_z /= K;
-
-        double x = 0;
-        double y = 0;
-        double z = 0;
-        for (int j = 0; j < K; j++) {
-            x += ((*cloud)[indices[j]].x - mean_x);
-            y += ((*cloud)[indices[j]].y - mean_y);
-            z += ((*cloud)[indices[j]].z - mean_z);
-        }
-        x /= POINTS - 1;
-        y /= POINTS - 1;
-        z /= POINTS - 1;
-
-        MatrixXd cov{
-            {x * x, x * y, x * z},
-            {y * x, y * y, y * z},
-            {z * x, z * y, z * z}
-        };
+        MatrixXd centered = mat.rowwise() - mat.colwise().mean();
+        MatrixXd cov = (centered.adjoint() * centered) / double(mat.rows() - 1);
 
         EigenSolver<Matrix3d> es(cov, false);
         Vector3cd D = es.eigenvalues();
@@ -185,7 +164,7 @@ void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud) {
 
         double var = min(R[0], min(R[1], R[2])) / (R[0] + R[1] + R[2]);
 
-        if (var == 0) {
+        if (var < 0.005) {
             (*cloud)[i].r = 255;
             (*cloud)[i].g = 255;
             (*cloud)[i].b = 255;
