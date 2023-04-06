@@ -13,7 +13,7 @@ using namespace e57;
 using namespace Eigen;
 using namespace std;
 
-static int POINTS = 5000;
+static int POINTS = 10;
 
 double randDouble(int max) {
     return max * rand() / (RAND_MAX + 1.0f);
@@ -34,25 +34,70 @@ void setUsingColoredCartesianPoints(Data3D& header)
     header.colorLimits.colorBlueMaximum = 255;
 }
 
-void writeTestFile() {
-    cout << "WRITING TEST.E57\n";
-    srand(time(NULL));
+Data3DPointsDouble readFile(string filename, Data3D& data3DHeader, bool verbose = false) {
+    cout << "Reading data from " << filename << "\n";
+
+    string location = "../../../../data/" + filename;
+    Reader reader(location, {});
+
+    E57Root header;
+    reader.GetE57Root(header);
+    int blockCount = reader.GetData3DCount();
+
+    reader.ReadData3D(0, data3DHeader);
+    int pointCount = data3DHeader.pointCount;
+
+    Data3DPointsDouble pointsData(data3DHeader);
+    CompressedVectorReader vectorReader = reader.SetUpData3DPointsData(0, pointCount, pointsData);
+
+    vectorReader.read();
+    vectorReader.close();
+
+    reader.Close();
+
+    if (verbose) {
+        cout << "GUID: " << header.guid << "\n";
+        cout << "Block Count: " << blockCount << "\n";
+        cout << "Block GUID: " << data3DHeader.guid << "\n";
+        cout << "Point Count: " << pointCount << "\n";
+        for (int i = 0; i < pointCount; i++) {
+            printf("Point #%-6dLocation: %-13f%-13f%-15fColor: %-5d%-5d%-5d\n", i,
+                pointsData.cartesianX[i], pointsData.cartesianY[i], pointsData.cartesianZ[i],
+                pointsData.colorRed[i], pointsData.colorGreen[i], pointsData.colorBlue[i]);
+        }
+    }
+
+    return pointsData;
+}
+
+void writeFile(string filename, Data3D &header, Data3DPointsDouble &data) {
+    cout << "Writing data to " << filename << "\n";
+
     WriterOptions options;
     options.guid = "Test File GUID";
-    Writer writer("../../../../data/test.e57", options);
+    string location = "../../../../data/" + filename;
+    Writer writer(location, options);
+
+    writer.WriteData3DData(header, data);
+    writer.Close();
+}
+
+void writeTestFile() {
+    srand(time(NULL));
+    cout << "Generating data: \n";
     Data3D header;
-    int maxCoord = 1024;
     setUsingColoredCartesianPoints(header);
     header.guid = "Test File Scan Header GUID";
     header.description = "libE57Format test write file";
     header.pointCount = POINTS;
     header.pointFields.pointRangeMinimum = 0.0;
-    header.pointFields.pointRangeMaximum = double(maxCoord);
+    header.pointFields.pointRangeMaximum = 1024.0;
+
     Data3DPointsDouble pointsData(header);
     for (int i = 0; i < POINTS; i++) {
-        pointsData.cartesianX[i] = randDouble(maxCoord);
-        pointsData.cartesianY[i] = randDouble(maxCoord);
-        pointsData.cartesianZ[i] = randDouble(maxCoord);
+        pointsData.cartesianX[i] = randDouble(1024);
+        pointsData.cartesianY[i] = randDouble(1024);
+        pointsData.cartesianZ[i] = randDouble(1024);
         pointsData.colorRed[i] = int(randDouble(255));
         pointsData.colorGreen[i] = int(randDouble(255));
         pointsData.colorBlue[i] = int(randDouble(255));
@@ -61,50 +106,12 @@ void writeTestFile() {
             pointsData.cartesianX[i], pointsData.cartesianY[i], pointsData.cartesianZ[i],
             pointsData.colorRed[i], pointsData.colorGreen[i], pointsData.colorBlue[i]);
     }
-    try {
-        writer.WriteData3DData(header, pointsData);
-    }
-    catch (E57Exception& err)
-    {
-        cout << err.errorStr() << ": " << err.context();
-    }
-    writer.Close();
+    writeFile("test.e57", header, pointsData);
 }
 
-Data3DPointsDouble readFile(string filename) {
-    cout << "\n\nREADING " << filename << "\n";
-    string location = "../../../../data/" + filename;
-    Reader reader(location, {});
+void markEdges(Data3DPointsDouble &data) {
+    cout << "Marking Edges\n";
 
-    E57Root header;
-    reader.GetE57Root(header);
-    cout << "GUID: " << header.guid << "\n";
-    int blockCount = reader.GetData3DCount();
-    cout << "Block Count: " << blockCount << "\n";
-
-    Data3D data3DHeader;
-    for (int b = 0; b < blockCount; b++) {
-        reader.ReadData3D(b, data3DHeader);
-        int pointCount = data3DHeader.pointCount;
-        cout << "Block GUID: " << data3DHeader.guid << "\n";
-        cout << "Point Count: " << pointCount << "\n";
-
-        Data3DPointsDouble pointsData(data3DHeader);
-        CompressedVectorReader vectorReader = reader.SetUpData3DPointsData(0, pointCount, pointsData);
-
-        vectorReader.read();
-        vectorReader.close();
-        for (int i = 0; i < pointCount; i++) {
-            printf("Point #%-6dLocation: %-13f%-13f%-15fColor: %-5d%-5d%-5d\n", i,
-                pointsData.cartesianX[i], pointsData.cartesianY[i], pointsData.cartesianZ[i],
-                pointsData.colorRed[i], pointsData.colorGreen[i], pointsData.colorBlue[i]);
-        }
-        reader.Close();
-        return pointsData;
-    }
-}
-
-Data3DPointsDouble markEdges(Data3DPointsDouble data) {
     MatrixXd mat(POINTS, 3);
     for (int i = 0; i < POINTS; i++) {
         mat(i, 0) = data.cartesianX[i];
@@ -143,33 +150,18 @@ Data3DPointsDouble markEdges(Data3DPointsDouble data) {
             data.colorGreen[i] = 1;
         }
     }
-    return data;
-}
-
-void writeDataToFile(string filename, Data3DPointsDouble data) {
-    WriterOptions options;
-    options.guid = "Test File GUID";
-    cout << "\n\nWRITING " << filename << "\n";
-    string location = "../../../../data/" + filename;
-    Writer writer(location, options);
-    Data3D header;
-    setUsingColoredCartesianPoints(header);
-    header.guid = "Test File Scan Header GUID";
-    header.description = "libE57Format test write file";
-    header.pointCount = POINTS;
-    header.pointFields.pointRangeMinimum = 0.0;
-    header.pointFields.pointRangeMaximum = 1024.0;
-
-    writer.WriteData3DData(header, data);
-    writer.Close();
 }
 
 int main() {
     writeTestFile();
-    Data3DPointsDouble data = readFile("test.e57");
-    data = markEdges(data);
-    writeDataToFile("test.e57", data);
-    readFile("test.e57");
+
+    Data3D header;
+    Data3DPointsDouble data = readFile("test.e57", header);
+
+    markEdges(data);
+
+    writeFile("test.e57", header, data);
+    readFile("test.e57", header, true);
 
     cin.get();
     return 0;
