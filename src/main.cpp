@@ -13,7 +13,7 @@ using namespace e57;
 using namespace Eigen;
 using namespace std;
 
-static int POINTS = 10;
+static int POINTS = 50000;
 
 double randDouble(int max) {
     return max * rand() / (RAND_MAX + 1.0f);
@@ -82,9 +82,9 @@ void writeFile(string filename, Data3D &header, Data3DPointsDouble &data) {
     writer.Close();
 }
 
-void writeTestFile() {
+void writeTestFile(bool verbose = false) {
     srand(time(NULL));
-    cout << "Generating data: \n";
+    cout << "Generating data\n";
     Data3D header;
     setUsingColoredCartesianPoints(header);
     header.guid = "Test File Scan Header GUID";
@@ -94,18 +94,35 @@ void writeTestFile() {
     header.pointFields.pointRangeMaximum = 1024.0;
 
     Data3DPointsDouble pointsData(header);
-    for (int i = 0; i < POINTS; i++) {
+
+    for (int i = 0; i < POINTS/2; i++) {
         pointsData.cartesianX[i] = randDouble(1024);
+        pointsData.cartesianY[i] = randDouble(1024);
+        pointsData.cartesianZ[i] = randDouble(5);
+        pointsData.colorRed[i] = int(randDouble(255));
+        pointsData.colorGreen[i] = int(randDouble(255));
+        pointsData.colorBlue[i] = int(randDouble(255));
+
+        if (verbose)
+        printf("Point #%-6dLocation: %-13f%-13f%-15fColor: %-5d%-5d%-5d\n", i,
+            pointsData.cartesianX[i], pointsData.cartesianY[i], pointsData.cartesianZ[i],
+            pointsData.colorRed[i], pointsData.colorGreen[i], pointsData.colorBlue[i]);
+    }
+
+    for (int i = POINTS / 2; i < POINTS; i++) {
+        pointsData.cartesianX[i] = randDouble(5);
         pointsData.cartesianY[i] = randDouble(1024);
         pointsData.cartesianZ[i] = randDouble(1024);
         pointsData.colorRed[i] = int(randDouble(255));
         pointsData.colorGreen[i] = int(randDouble(255));
         pointsData.colorBlue[i] = int(randDouble(255));
 
+        if (verbose)
         printf("Point #%-6dLocation: %-13f%-13f%-15fColor: %-5d%-5d%-5d\n", i,
             pointsData.cartesianX[i], pointsData.cartesianY[i], pointsData.cartesianZ[i],
             pointsData.colorRed[i], pointsData.colorGreen[i], pointsData.colorBlue[i]);
     }
+
     writeFile("test.e57", header, pointsData);
 }
 
@@ -161,7 +178,7 @@ int main() {
     markEdges(data);
 
     writeFile("test.e57", header, data);
-    readFile("test.e57", header, true);
+    readFile("test.e57", header);
 
     cin.get();
     return 0;
