@@ -13,11 +13,28 @@ using namespace e57;
 using namespace Eigen;
 using namespace std;
 
+static int POINTS = 5000;
+
 double randDouble(int max) {
     return max * rand() / (RAND_MAX + 1.0f);
 }
 
-void writeTestFile(size_t totalPoints) {
+void setUsingColoredCartesianPoints(Data3D& header)
+{
+    header.pointFields.cartesianXField = true;
+    header.pointFields.cartesianYField = true;
+    header.pointFields.cartesianZField = true;
+
+    header.pointFields.colorRedField = true;
+    header.pointFields.colorGreenField = true;
+    header.pointFields.colorBlueField = true;
+
+    header.colorLimits.colorRedMaximum = 255;
+    header.colorLimits.colorGreenMaximum = 255;
+    header.colorLimits.colorBlueMaximum = 255;
+}
+
+void writeTestFile() {
     cout << "WRITING TEST.E57\n";
     srand(time(NULL));
     WriterOptions options;
@@ -25,22 +42,14 @@ void writeTestFile(size_t totalPoints) {
     Writer writer("../../../../data/test.e57", options);
     Data3D header;
     int maxCoord = 1024;
+    setUsingColoredCartesianPoints(header);
     header.guid = "Test File Scan Header GUID";
     header.description = "libE57Format test write file";
-    header.pointCount = totalPoints;
-    header.pointFields.cartesianXField = true;
-    header.pointFields.cartesianYField = true;
-    header.pointFields.cartesianZField = true;
-    header.pointFields.colorRedField = true;
-    header.pointFields.colorGreenField = true;
-    header.pointFields.colorBlueField = true;
-    header.colorLimits.colorRedMaximum = 255;
-    header.colorLimits.colorGreenMaximum = 255;
-    header.colorLimits.colorBlueMaximum = 255;
+    header.pointCount = POINTS;
     header.pointFields.pointRangeMinimum = 0.0;
     header.pointFields.pointRangeMaximum = double(maxCoord);
     Data3DPointsDouble pointsData(header);
-    for (int i = 0; i < totalPoints; i++) {
+    for (int i = 0; i < POINTS; i++) {
         pointsData.cartesianX[i] = randDouble(maxCoord);
         pointsData.cartesianY[i] = randDouble(maxCoord);
         pointsData.cartesianZ[i] = randDouble(maxCoord);
@@ -95,17 +104,17 @@ Data3DPointsDouble readFile(string filename) {
     }
 }
 
-void markEdges(Data3DPointsDouble data, int pointCount) {
-    MatrixXd mat(pointCount, 3);
-    for (int i = 0; i < pointCount; i++) {
+Data3DPointsDouble markEdges(Data3DPointsDouble data) {
+    MatrixXd mat(POINTS, 3);
+    for (int i = 0; i < POINTS; i++) {
         mat(i, 0) = data.cartesianX[i];
         mat(i, 1) = data.cartesianY[i];
         mat(i, 2) = data.cartesianZ[i];
     }
     Vector3d mean = mat.colwise().mean();
 
-    VectorXd variations(pointCount);
-    for (int i = 0; i < pointCount; i++) {
+    VectorXd variations(POINTS);
+    for (int i = 0; i < POINTS; i++) {
         double x = mat(i, 0) - mean[0];
         double y = mat(i, 1) - mean[1];
         double z = mat(i, 2) - mean[2];
@@ -134,23 +143,20 @@ void markEdges(Data3DPointsDouble data, int pointCount) {
             data.colorGreen[i] = 1;
         }
     }
+    return data;
+}
 
+void writeDataToFile(string filename, Data3DPointsDouble data) {
     WriterOptions options;
     options.guid = "Test File GUID";
-    Writer writer("../../../../data/test.e57", options);
+    cout << "\n\nWRITING " << filename << "\n";
+    string location = "../../../../data/" + filename;
+    Writer writer(location, options);
     Data3D header;
+    setUsingColoredCartesianPoints(header);
     header.guid = "Test File Scan Header GUID";
     header.description = "libE57Format test write file";
-    header.pointCount = pointCount;
-    header.pointFields.cartesianXField = true;
-    header.pointFields.cartesianYField = true;
-    header.pointFields.cartesianZField = true;
-    header.pointFields.colorRedField = true;
-    header.pointFields.colorGreenField = true;
-    header.pointFields.colorBlueField = true;
-    header.colorLimits.colorRedMaximum = 255;
-    header.colorLimits.colorGreenMaximum = 255;
-    header.colorLimits.colorBlueMaximum = 255;
+    header.pointCount = POINTS;
     header.pointFields.pointRangeMinimum = 0.0;
     header.pointFields.pointRangeMaximum = 1024.0;
 
@@ -159,9 +165,10 @@ void markEdges(Data3DPointsDouble data, int pointCount) {
 }
 
 int main() {
-    writeTestFile(50);
+    writeTestFile();
     Data3DPointsDouble data = readFile("test.e57");
-    markEdges(data, 50);
+    data = markEdges(data);
+    writeDataToFile("test.e57", data);
     readFile("test.e57");
 
     cin.get();
