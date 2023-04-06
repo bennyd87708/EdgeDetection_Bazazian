@@ -2,6 +2,10 @@
 //
 
 #include "main.h"
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/kdtree/kdtree_flann.h>
 #include <eigen/dense>
 #include <eigen/eigenvalues>
 #include <iomanip>
@@ -12,6 +16,7 @@
 using namespace e57;
 using namespace Eigen;
 using namespace std;
+using namespace pcl;
 
 static int POINTS = 50000;
 
@@ -98,7 +103,7 @@ void writeTestFile(bool verbose = false) {
     for (int i = 0; i < POINTS/2; i++) {
         pointsData.cartesianX[i] = randDouble(1024);
         pointsData.cartesianY[i] = randDouble(1024);
-        pointsData.cartesianZ[i] = randDouble(5);
+        pointsData.cartesianZ[i] = 0.0;
         pointsData.colorRed[i] = int(randDouble(255));
         pointsData.colorGreen[i] = int(randDouble(255));
         pointsData.colorBlue[i] = int(randDouble(255));
@@ -110,7 +115,7 @@ void writeTestFile(bool verbose = false) {
     }
 
     for (int i = POINTS / 2; i < POINTS; i++) {
-        pointsData.cartesianX[i] = randDouble(5);
+        pointsData.cartesianX[i] = 0.0;
         pointsData.cartesianY[i] = randDouble(1024);
         pointsData.cartesianZ[i] = randDouble(1024);
         pointsData.colorRed[i] = int(randDouble(255));
@@ -126,46 +131,107 @@ void writeTestFile(bool verbose = false) {
     writeFile("test.e57", header, pointsData);
 }
 
-void markEdges(Data3DPointsDouble &data) {
+void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud) {
     cout << "Marking Edges\n";
 
-    MatrixXd mat(POINTS, 3);
-    for (int i = 0; i < POINTS; i++) {
-        mat(i, 0) = data.cartesianX[i];
-        mat(i, 1) = data.cartesianY[i];
-        mat(i, 2) = data.cartesianZ[i];
-    }
-    Vector3d mean = mat.colwise().mean();
+    KdTreeFLANN<PointXYZRGBA> kdtree;
+    kdtree.setInputCloud(cloud);
 
-    VectorXd variations(POINTS);
     for (int i = 0; i < POINTS; i++) {
-        double x = mat(i, 0) - mean[0];
-        double y = mat(i, 1) - mean[1];
-        double z = mat(i, 2) - mean[2];
+        PointXYZRGBA searchPoint = (*cloud)[i];
+        int K = 20;
+        vector<int> indices(K);
+        vector<float> distances(K);
+        if (kdtree.nearestKSearch(searchPoint, K, indices, distances) <= 0) {
+            (*cloud)[i].r = 0;
+            (*cloud)[i].g = 0;
+            (*cloud)[i].b = 0;
+            continue;
+        }
+
+        double mean_x = 0;
+        double mean_y = 0;
+        double mean_z = 0;
+        for (int j = 0; j < K; j++) {
+            mean_x += (*cloud)[indices[j]].x;
+            mean_y += (*cloud)[indices[j]].y;
+            mean_z += (*cloud)[indices[j]].z;
+        }
+        mean_x /= K;
+        mean_y /= K;
+        mean_z /= K;
+
+        double x = 0;
+        double y = 0;
+        double z = 0;
+        for (int j = 0; j < K; j++) {
+            x += ((*cloud)[indices[j]].x - mean_x);
+            y += ((*cloud)[indices[j]].y - mean_y);
+            z += ((*cloud)[indices[j]].z - mean_z);
+        }
+        x /= POINTS - 1;
+        y /= POINTS - 1;
+        z /= POINTS - 1;
+
         MatrixXd cov{
             {x * x, x * y, x * z},
             {y * x, y * y, y * z},
             {z * x, z * y, z * z}
         };
 
-        EigenSolver<Matrix3d> es(cov);
-        Matrix3d D = es.pseudoEigenvalueMatrix();
-        double lambda_0 = D(0, 0);
-        double lambda_1 = D(1, 1);
-        double lambda_2 = D(2, 2);
+        EigenSolver<Matrix3d> es(cov, false);
+        Vector3cd D = es.eigenvalues();
+        Vector3d R = D.real();
 
-        variations[i] = lambda_0 / (lambda_0 + lambda_1 + lambda_2);
+        double var = min(R[0], min(R[1], R[2])) / (R[0] + R[1] + R[2]);
 
-        if (variations[i] > 0.99) {
-            data.colorRed[i] = 255;
-            data.colorBlue[i] = 255;
-            data.colorGreen[i] = 255;
+        if (var == 0) {
+            (*cloud)[i].r = 255;
+            (*cloud)[i].g = 255;
+            (*cloud)[i].b = 255;
         }
         else {
-            data.colorRed[i] = 1;
-            data.colorBlue[i] = 1;
-            data.colorGreen[i] = 1;
+            (*cloud)[i].r = 255;
+            (*cloud)[i].g = 0;
+            (*cloud)[i].b = 0;
         }
+    }
+}
+
+PointCloud<PointXYZRGBA>::Ptr convertToPCLCloud(Data3DPointsDouble& data) {
+    PointCloud<PointXYZRGBA>::Ptr cloud(new PointCloud<PointXYZRGBA>);
+    cloud->width = POINTS;
+    cloud->height = 1;
+    cloud->points.resize(cloud->width * cloud->height);
+    for (std::size_t i = 0; i < cloud->size(); ++i)
+    {
+        (*cloud)[i].x = data.cartesianX[i];
+        (*cloud)[i].y = data.cartesianY[i];
+        (*cloud)[i].z = data.cartesianZ[i];
+        (*cloud)[i].r = data.colorRed[i];
+        (*cloud)[i].g = data.colorGreen[i];
+        (*cloud)[i].b = data.colorBlue[i];
+    }
+    return cloud;
+}
+
+void convertToData(Data3DPointsDouble& data, PointCloud<PointXYZRGBA>::Ptr cloud) {
+    for (std::size_t i = 0; i < cloud->size(); ++i)
+    {
+        data.cartesianX[i] = (*cloud)[i].x;
+        data.cartesianY[i] = (*cloud)[i].y;
+        data.cartesianZ[i] = (*cloud)[i].z;
+        data.colorRed[i]   = (*cloud)[i].r;
+        data.colorGreen[i] = (*cloud)[i].g;
+        data.colorBlue[i]  = (*cloud)[i].b;
+    }
+}
+
+void visualizePCLCloud(PointCloud<PointXYZRGBA>::Ptr cloud) {
+    visualization::CloudViewer viewer("Simple Cloud Viewer");
+    viewer.showCloud(cloud);
+    while (!viewer.wasStopped())
+    {
     }
 }
 
@@ -174,12 +240,17 @@ int main() {
 
     Data3D header;
     Data3DPointsDouble data = readFile("test.e57", header);
+    PointCloud<PointXYZRGBA>::Ptr cloud = convertToPCLCloud(data);
 
-    markEdges(data);
+    markEdges(cloud);
 
+    convertToData(data, cloud);
     writeFile("test.e57", header, data);
     readFile("test.e57", header);
 
+    visualizePCLCloud(cloud);
+
+    cout << "Completed.";
     cin.get();
     return 0;
 }
