@@ -18,7 +18,7 @@ using namespace Eigen;
 using namespace std;
 using namespace pcl;
 
-static int POINTS = 50000;
+int POINTS = 1088711;
 
 double randDouble(int max) {
     return max * rand() / (RAND_MAX + 1.0f);
@@ -51,6 +51,7 @@ Data3DPointsDouble readFile(string filename, Data3D& data3DHeader, bool verbose 
 
     reader.ReadData3D(0, data3DHeader);
     int pointCount = data3DHeader.pointCount;
+    POINTS = pointCount;
 
     Data3DPointsDouble pointsData(data3DHeader);
     CompressedVectorReader vectorReader = reader.SetUpData3DPointsData(0, pointCount, pointsData);
@@ -94,7 +95,7 @@ void writeTestFile(bool verbose = false) {
     setUsingColoredCartesianPoints(header);
     header.guid = "Test File Scan Header GUID";
     header.description = "libE57Format test write file";
-    header.pointCount = POINTS;
+    header.pointCount = 50000;
     header.pointFields.pointRangeMinimum = 0.0;
     header.pointFields.pointRangeMaximum = 1024.0;
 
@@ -131,15 +132,19 @@ void writeTestFile(bool verbose = false) {
     writeFile("test.e57", header, pointsData);
 }
 
-void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud) {
+void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud, int K, double threshold) {
     cout << "Marking edges\n";
 
     KdTreeFLANN<PointXYZRGBA> kdtree;
     kdtree.setInputCloud(cloud);
 
     for (int i = 0; i < POINTS; i++) {
+
+        if (i % int(POINTS / 100) == 0) {
+            cout << int(i / int(POINTS / 100)) << "%\n";
+        }
+
         PointXYZRGBA searchPoint = (*cloud)[i];
-        int K = 50;
         vector<int> indices(K);
         vector<float> distances(K);
         if (kdtree.nearestKSearch(searchPoint, K, indices, distances) <= 0) {
@@ -164,16 +169,35 @@ void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud) {
 
         double var = min(R[0], min(R[1], R[2])) / (R[0] + R[1] + R[2]);
 
-        if (var < 0.005) {
-            (*cloud)[i].r = 255;
-            (*cloud)[i].g = 255;
-            (*cloud)[i].b = 255;
-        }
-        else {
+        if (var > threshold) {
             (*cloud)[i].r = 255;
             (*cloud)[i].g = 0;
             (*cloud)[i].b = 0;
         }
+        else {
+            (*cloud)[i].r = 255;
+            (*cloud)[i].g = 255;
+            (*cloud)[i].b = 255;
+        }
+    }
+}
+
+void highlightNearestNeighbors(PointCloud<PointXYZRGBA>::Ptr cloud, int K, int index = 0) {
+    KdTreeFLANN<PointXYZRGBA> kdtree;
+    kdtree.setInputCloud(cloud);
+    for (int i = 0; i < POINTS; i++) {
+        (*cloud)[i].r = 255;
+        (*cloud)[i].g = 255;
+        (*cloud)[i].b = 255;
+    }
+    PointXYZRGBA searchPoint = (*cloud)[index];
+    vector<int> indices(K);
+    vector<float> distances(K);
+    kdtree.nearestKSearch(searchPoint, K, indices, distances);
+    for (int j = 0; j < K; j++) {
+        (*cloud)[indices[j]].r = 255;
+        (*cloud)[indices[j]].g = 0;
+        (*cloud)[indices[j]].b = 0;
     }
 }
 
@@ -215,17 +239,18 @@ void visualizePCLCloud(PointCloud<PointXYZRGBA>::Ptr cloud) {
 }
 
 int main() {
-    writeTestFile();
+    //writeTestFile();
 
     Data3D header;
-    Data3DPointsDouble data = readFile("test.e57", header);
+    Data3DPointsDouble data = readFile("region.e57", header);
     PointCloud<PointXYZRGBA>::Ptr cloud = convertToPCLCloud(data);
-
-    markEdges(cloud);
+    
+    //highlightNearestNeighbors(cloud, 300, 500);
+    markEdges(cloud, 200, 0.01);
 
     convertToData(data, cloud);
-    writeFile("test.e57", header, data);
-    readFile("test.e57", header);
+    writeFile("region.e57", header, data);
+    //readFile("test.e57", header);
 
     visualizePCLCloud(cloud);
 
