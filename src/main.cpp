@@ -18,7 +18,7 @@ using namespace Eigen;
 using namespace std;
 using namespace pcl;
 
-int POINTS = 1088711;
+int POINTS = 50000;
 
 double randDouble(int max) {
     return max * rand() / (RAND_MAX + 1.0f);
@@ -52,6 +52,7 @@ Data3DPointsDouble readFile(string filename, Data3D& data3DHeader, bool verbose 
     reader.ReadData3D(0, data3DHeader);
     int pointCount = data3DHeader.pointCount;
     POINTS = pointCount;
+    cout << "Reading " << POINTS << " points.\n";
 
     Data3DPointsDouble pointsData(data3DHeader);
     CompressedVectorReader vectorReader = reader.SetUpData3DPointsData(0, pointCount, pointsData);
@@ -138,15 +139,23 @@ void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud, int K, double threshold) {
     KdTreeFLANN<PointXYZRGBA> kdtree;
     kdtree.setInputCloud(cloud);
 
+    PointXYZRGBA searchPoint;
+    vector<int> indices(K);
+    vector<float> distances(K);
+    MatrixXd mat(K, 3);
+    MatrixXd centered;
+    MatrixXd cov;
+    Vector3cd D;
+    Vector3d R;
+    double var;
+
     for (int i = 0; i < POINTS; i++) {
 
         if (i % int(POINTS / 100) == 0) {
             cout << int(i / int(POINTS / 100)) << "%\n";
         }
 
-        PointXYZRGBA searchPoint = (*cloud)[i];
-        vector<int> indices(K);
-        vector<float> distances(K);
+        searchPoint = (*cloud)[i];
         if (kdtree.nearestKSearch(searchPoint, K, indices, distances) <= 0) {
             (*cloud)[i].r = 0;
             (*cloud)[i].g = 0;
@@ -154,20 +163,19 @@ void markEdges(PointCloud<PointXYZRGBA>::Ptr cloud, int K, double threshold) {
             continue;
         }
 
-        MatrixXd mat(K, 3);
         for (int j = 0; j < K; j++) {
             mat(j, 0) = (*cloud)[indices[j]].x;
             mat(j, 1) = (*cloud)[indices[j]].y;
             mat(j, 2) = (*cloud)[indices[j]].z;
         }
-        MatrixXd centered = mat.rowwise() - mat.colwise().mean();
-        MatrixXd cov = (centered.adjoint() * centered) / double(mat.rows() - 1);
+        centered = mat.rowwise() - mat.colwise().mean();
+        cov = (centered.adjoint() * centered) / double(mat.rows() - 1);
 
         EigenSolver<Matrix3d> es(cov, false);
-        Vector3cd D = es.eigenvalues();
-        Vector3d R = D.real();
+        D = es.eigenvalues();
+        R = D.real();
 
-        double var = min(R[0], min(R[1], R[2])) / (R[0] + R[1] + R[2]);
+        var = min(R[0], min(R[1], R[2])) / (R[0] + R[1] + R[2]);
 
         if (var > threshold) {
             (*cloud)[i].r = 255;
@@ -242,14 +250,14 @@ int main() {
     //writeTestFile();
 
     Data3D header;
-    Data3DPointsDouble data = readFile("region.e57", header);
+    Data3DPointsDouble data = readFile("region_small.e57", header);
     PointCloud<PointXYZRGBA>::Ptr cloud = convertToPCLCloud(data);
     
     //highlightNearestNeighbors(cloud, 300, 500);
-    markEdges(cloud, 200, 0.01);
+    //markEdges(cloud, 50, 0.005);
 
-    convertToData(data, cloud);
-    writeFile("region.e57", header, data);
+    //convertToData(data, cloud);
+    //writeFile("test.e57", header, data);
     //readFile("test.e57", header);
 
     visualizePCLCloud(cloud);
